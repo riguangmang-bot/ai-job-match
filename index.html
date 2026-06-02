@@ -28,6 +28,16 @@
       <div class="nav-cta">
         <button class="btn btn-primary btn-sm" data-scroll-to="upload">开始体验</button>
       </div>
+      <button class="nav-toggle" id="navToggle" aria-label="菜单">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <div class="nav-mobile-overlay" id="navMobileOverlay">
+      <a href="#upload">📄 画像构建</a>
+      <a href="#matching">🎯 岗位匹配</a>
+      <a href="#diagnosis">🔬 简历诊断</a>
+      <a href="#optimization">✨ 简历优化</a>
+      <a href="#dashboard">📈 数据复盘</a>
     </div>
   </nav>
 
@@ -348,17 +358,19 @@
       <!-- 历史记录 -->
       <div class="history-table-card">
         <h4>📋 近期操作记录</h4>
-        <table class="history-table">
-          <thead>
-            <tr>
-              <th>日期</th>
-              <th>操作类型</th>
-              <th>详情</th>
-              <th>效果</th>
-            </tr>
-          </thead>
-          <tbody id="historyTableBody"></tbody>
-        </table>
+        <div class="history-table-wrap">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>操作类型</th>
+                <th>详情</th>
+                <th>效果</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>

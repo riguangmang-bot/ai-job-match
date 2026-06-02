@@ -27,10 +27,13 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==================== 导航 ====================
 function initNavigation() {
   const navLinks = document.querySelectorAll('.nav-links a');
+  const mobileLinks = document.querySelectorAll('.nav-mobile-overlay a');
   const sections = document.querySelectorAll('section[id]');
+  const navToggle = document.getElementById('navToggle');
+  const mobileOverlay = document.getElementById('navMobileOverlay');
 
   // 滚动高亮
-  window.addEventListener('scroll', () => {
+  function updateActiveLink() {
     let current = '';
     sections.forEach(s => {
       const top = s.offsetTop - 100;
@@ -39,15 +42,49 @@ function initNavigation() {
     navLinks.forEach(a => {
       a.classList.toggle('active', a.getAttribute('href') === '#' + current);
     });
-  });
+    mobileLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+  window.addEventListener('scroll', updateActiveLink);
 
-  // 平滑滚动
+  // 桌面导航平滑滚动
   navLinks.forEach(a => {
     a.addEventListener('click', e => {
       e.preventDefault();
       const target = document.querySelector(a.getAttribute('href'));
       if (target) target.scrollIntoView({ behavior: 'smooth' });
     });
+  });
+
+  // 汉堡菜单开关
+  navToggle.addEventListener('click', () => {
+    navToggle.classList.toggle('active');
+    mobileOverlay.classList.toggle('active');
+    document.body.style.overflow = mobileOverlay.classList.contains('active') ? 'hidden' : '';
+  });
+
+  // 移动端导航点击后关闭菜单
+  mobileLinks.forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) {
+        navToggle.classList.remove('active');
+        mobileOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
+
+  // 点击菜单外关闭
+  mobileOverlay.addEventListener('click', e => {
+    if (e.target === mobileOverlay) {
+      navToggle.classList.remove('active');
+      mobileOverlay.classList.remove('active');
+      document.body.style.overflow = '';
+    }
   });
 
   // CTA按钮
