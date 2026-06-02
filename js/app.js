@@ -425,6 +425,37 @@ function applyProfileToMatching(extracted) {
   APP_STATE.adjustedJobs = adjusted;
   APP_STATE.isRealProfile = true;
   APP_STATE.extractedProfile = profile;
+
+  // 同步 Hero 卡片
+  updateHeroCards(adjusted);
+}
+
+// 更新 Hero 区域的三张匹配度卡片
+function updateHeroCards(jobs) {
+  if (!jobs || jobs.length < 3) return;
+  const top3 = jobs.slice(0, 3);
+  for (let i = 0; i < 3; i++) {
+    const job = top3[i];
+    const scoreEl = document.getElementById('heroScore' + (i + 1));
+    const companyEl = document.getElementById('heroCompany' + (i + 1));
+    const tagEl = document.getElementById('heroTag' + (i + 1));
+    const dimsEl = document.getElementById('heroDims' + (i + 1));
+    if (scoreEl) scoreEl.textContent = job.matchScore + '%';
+    if (companyEl) companyEl.textContent = job.company + ' · ' + job.position;
+    if (tagEl) {
+      const tagText = job.matchScore >= 85 ? '✅ 极高匹配' : job.matchScore >= 75 ? '👍 高度匹配' : '📋 中度匹配';
+      const tagColor = job.matchScore >= 85 ? 'var(--accent)' : job.matchScore >= 75 ? 'var(--primary)' : 'var(--warning)';
+      tagEl.textContent = tagText;
+      tagEl.style.color = tagColor;
+    }
+    if (dimsEl) {
+      const dims = job.dimensions;
+      dimsEl.innerHTML = `
+        <span class="tag tag-primary">专业 ${dims.专业匹配度 || dims['专业匹配度']}</span>
+        <span class="tag tag-accent">技能 ${dims.技能适配度 || dims['技能适配度']}</span>
+      `;
+    }
+  }
 }
 
 // 基于真实解析文本生成画像
@@ -464,29 +495,26 @@ function extractInfoFromText(text) {
     const l = cleanLines[i];
     const compact = l.replace(/\s+/g, '');
     if (/姓名/.test(compact)) {
-      // 先尝试同行提取：从行中去掉"姓名"标签部分，再看剩余是否有名字
-      const remainder = l.replace(/\s+/g, '').replace(/^姓名[：:]*\s*/, '');
-      if (remainder && remainder !== l.replace(/\s+/g, '')) {
+      // 先用正则直接从紧凑文本中提取 "姓名+2~3汉字"（优先2-3字，避免吞入后续标签）
+      let nameMatch = compact.match(/姓名([一-鿿]{2,3})(?:民族|性别|电话|邮箱|出生|政治|籍贯|学历|毕业|求职|[A-Za-z\d])/);
+      if (!nameMatch) nameMatch = compact.match(/姓名([一-鿿]{2,3})/);
+      if (nameMatch && nameMatch[1] && nameMatch[1] !== '姓名' && nameMatch[1] !== '民族' && nameMatch[1] !== '性别') {
+        result.name = nameMatch[1]; break;
+      }
+      // 同行去标签提取
+      const remainder = compact.replace(/^.*?姓名[：:]*\s*/, '');
+      if (remainder && remainder.length >= 2 && remainder.length <= 6 && remainder !== compact) {
         const nameInLine = tryExtractChineseName(remainder);
-        if (nameInLine && nameInLine !== '姓名') {
-          result.name = nameInLine; break;
-        }
+        if (nameInLine && nameInLine !== '姓名') { result.name = nameInLine; break; }
       }
-      // 否则检查下一行
-      if (i + 1 < cleanLines.length) {
-        const nextLine = cleanLines[i + 1];
-        if (!isLabelLine(nextLine)) {
-          const nameNext = tryExtractChineseName(nextLine);
-          if (nameNext) { result.name = nameNext; break; }
-        }
+      // 下一行
+      if (i + 1 < cleanLines.length && !isLabelLine(cleanLines[i + 1])) {
+        const nameNext = tryExtractChineseName(cleanLines[i + 1]);
+        if (nameNext) { result.name = nameNext; break; }
       }
-      // 再检查下下行
-      if (!result.name && i + 2 < cleanLines.length) {
-        const nextLine2 = cleanLines[i + 2];
-        if (!isLabelLine(nextLine2)) {
-          const nameNext2 = tryExtractChineseName(nextLine2);
-          if (nameNext2) { result.name = nameNext2; break; }
-        }
+      if (!result.name && i + 2 < cleanLines.length && !isLabelLine(cleanLines[i + 2])) {
+        const nameNext2 = tryExtractChineseName(cleanLines[i + 2]);
+        if (nameNext2) { result.name = nameNext2; break; }
       }
     }
   }
@@ -495,8 +523,10 @@ function extractInfoFromText(text) {
   if (!result.name) {
     for (let i = 0; i < Math.min(10, cleanLines.length); i++) {
       const l = cleanLines[i];
-      if (isLabelLine(l)) continue;
-      if (/简历|个人|联系|电话|邮箱|地址|求职|应聘|RESUME|CV|籍贯|民族|出生|教育|经历|项目|技能|实习|工作/i.test(l)) continue;
+      // PDF经常把整篇内容合并成一行（>200字），此时不应跳过
+      const isLongLine = l.length > 200;
+      if (!isLongLine && isLabelLine(l)) continue;
+      if (!isLongLine && /简历|个人|联系|电话|邮箱|地址|求职|应聘|RESUME|CV|籍贯|民族|出生|教育|经历|项目|技能|实习|工作/i.test(l)) continue;
       if (/^[A-Za-z\s\d]{3,}$/.test(l)) continue;
       const name = tryExtractChineseName(l);
       if (name && name.length >= 2 && name.length <= 4 && name !== '姓名') {
@@ -515,10 +545,20 @@ function extractInfoFromText(text) {
     }
   }
 
-  // 策略4: 全文中 "姓名：xxx" 或 "姓名 xxx" 模式
+  // 策略5（PDF兜底）: 全文压缩后搜索 "姓名XX"（2-3字优先，后跟标签则截断）
   if (!result.name) {
-    const m = text.replace(/\s+/g, '').match(/姓名[：:]\s*([一-鿿]{2,4})/);
-    if (m) result.name = m[1];
+    const compactFull = text.replace(/\s+/g, '');
+    let m = compactFull.match(/姓名([一-鿿]{2,3})(?:民族|性别|电话|邮箱|出生|政治|籍贯|学历|毕业|求职|[A-Za-z\d]|$)/);
+    if (!m) m = compactFull.match(/姓名([一-鿿]{2,3})/);
+    if (m && m[1] && m[1].length >= 2 && m[1] !== '姓名' && m[1] !== '民族' && m[1] !== '性别') result.name = m[1];
+  }
+
+  // 策略6（PDF终极兜底）: 全文搜索"个人简历"后面可能的姓名
+  if (!result.name) {
+    const compactFull = text.replace(/\s+/g, '');
+    let m = compactFull.match(/个人简历([一-鿿]{2,3})(?:民族|性别|电话|邮箱|出生|政治|籍贯|学历|毕业|求职|[A-Za-z\d]|$)/);
+    if (!m) m = compactFull.match(/个人简历([一-鿿]{2,3})/);
+    if (m && m[1] && m[1].length >= 2) result.name = m[1];
   }
 
   // --- 学校 ---
