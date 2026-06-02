@@ -208,7 +208,7 @@ img { max-width: 100%; display: block; }
   padding: 24px;
   gap: 8px;
 }
-.nav-mobile-overlay.active { display: flex; }
+.nav-mobile-overlay.active { display: flex; overflow-y: auto; }
 .nav-mobile-overlay a {
   padding: 14px 20px;
   border-radius: var(--radius-sm);
@@ -576,16 +576,18 @@ img { max-width: 100%; display: block; }
 }
 .job-card.recommended { border-color: var(--accent); }
 .job-card.recommended::before {
-  content: '🔥 强烈推荐';
+  content: '🔥 推荐';
   position: absolute;
   top: 12px;
-  right: -28px;
+  right: -22px;
   background: linear-gradient(135deg, var(--accent), #00B894);
   color: #fff;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  padding: 4px 36px;
+  padding: 3px 28px;
   transform: rotate(45deg);
+  z-index: 1;
+  pointer-events: none;
 }
 .job-card-header {
   display: flex;
@@ -745,7 +747,7 @@ img { max-width: 100%; display: block; }
 .compare-panel {
   background: #fff;
   border-radius: var(--radius);
-  padding: 28px;
+  padding: 38px 28px 28px;
   box-shadow: var(--shadow);
   position: relative;
   overflow: hidden;
@@ -754,12 +756,13 @@ img { max-width: 100%; display: block; }
 .compare-panel.after { border-top: 3px solid var(--accent); }
 .compare-panel .panel-label {
   position: absolute;
-  top: 12px;
-  right: 16px;
+  top: 10px;
+  left: 28px;
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  z-index: 1;
 }
 .compare-panel.before .panel-label { color: var(--danger); }
 .compare-panel.after .panel-label { color: var(--accent); }
@@ -903,6 +906,7 @@ img { max-width: 100%; display: block; }
   -webkit-overflow-scrolling: touch;
 }
 .history-table {
+  min-width: 560px;
   width: 100%;
   border-collapse: collapse;
   font-size: 0.88rem;
@@ -1033,7 +1037,7 @@ img { max-width: 100%; display: block; }
   .section-title { font-size: 1.5rem; }
   .section-subtitle { font-size: 0.9rem; margin-bottom: 32px; }
 
-  .feature-grid { gap: 16px; }
+  .feature-grid { gap: 16px; margin-top: -20px; }
   .feature-card { padding: 24px 20px; }
 
   .upload-zone { padding: 36px 20px; }
@@ -1133,11 +1137,13 @@ img { max-width: 100%; display: block; }
   .history-table th, .history-table td { padding: 8px 6px; }
   .history-table-card { padding: 16px 12px; overflow-x: auto; }
 
-  .modal { padding: 20px 14px; width: 96vw; max-height: 90vh; }
-  .modal-close { top: 10px; right: 10px; width: 30px; height: 30px; font-size: 1rem; }
+  .modal { padding: 32px 18px 20px; width: 96vw; max-height: 90vh; }
+  .modal-close { top: 8px; right: 8px; width: 32px; height: 32px; font-size: 1rem; }
+  .modal h3 { font-size: 1.1rem; padding-right: 30px; }
 
   .footer { padding: 16px 0; font-size: 0.75rem; }
-  .toast { left: 16px; right: 16px; transform: none; text-align: center; font-size: 0.82rem; }
+  .toast { top: 68px; left: 16px; right: 16px; transform: none; text-align: center; font-size: 0.82rem; }
+  .feature-grid { margin-top: 0; }
 }
 
 /* --- Animations --- */

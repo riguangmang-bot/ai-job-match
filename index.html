@@ -8,6 +8,10 @@
   <link rel="stylesheet" href="css/style.css">
   <!-- ECharts -->
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <!-- mammoth.js: Word文档解析 -->
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <!-- pdf.js: PDF解析 -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 </head>
 <body>
 
@@ -120,11 +124,15 @@
       <p class="section-subtitle">上传简历，AI自动解析并构建专属求职画像，支持PDF/Word格式</p>
 
       <!-- 上传区域 -->
+      <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt" style="display:none;">
       <div class="upload-zone" id="uploadZone">
         <div class="upload-icon">📤</div>
-        <h3>点击上传简历文件</h3>
-        <p class="hint">支持 PDF、Word 格式，文件大小不超过 5MB</p>
-        <p class="hint" style="margin-top:4px;color:var(--primary);">（Demo已预置简历数据，点击即可体验）</p>
+        <h3>点击上传真实简历文件</h3>
+        <p class="hint">支持 PDF / Word / TXT 格式，文件大小不超过 10MB</p>
+        <p class="hint" style="margin-top:4px;color:var(--primary);">（或点击右侧按钮使用Demo预置数据）</p>
+      </div>
+      <div style="text-align:center;margin-top:12px;">
+        <button class="btn btn-outline btn-sm" id="useDemoData">📋 使用Demo模拟数据</button>
       </div>
 
       <!-- AI解析动画 -->

@@ -99,45 +99,182 @@ function initNavigation() {
 // ==================== 简历上传 ====================
 function initUploadZone() {
   const uploadZone = document.getElementById('uploadZone');
-  const parsingOverlay = document.getElementById('parsingOverlay');
-  const profileCard = document.getElementById('profileCard');
+  const fileInput = document.getElementById('fileInput');
+  const demoBtn = document.getElementById('useDemoData');
 
+  // 点击上传区域
   uploadZone.addEventListener('click', () => {
+    if (!APP_STATE.profileParsed) fileInput.click();
+  });
+
+  // 拖拽上传
+  uploadZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    uploadZone.style.borderColor = 'var(--primary)';
+    uploadZone.style.background = 'var(--primary-light)';
+  });
+  uploadZone.addEventListener('dragleave', () => {
+    uploadZone.style.borderColor = '';
+    uploadZone.style.background = '';
+  });
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.style.borderColor = '';
+    uploadZone.style.background = '';
+    const file = e.dataTransfer.files[0];
+    if (file && !APP_STATE.profileParsed) processFile(file);
+  });
+
+  // 文件选择
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) processFile(file);
+  });
+
+  // Demo数据按钮
+  demoBtn.addEventListener('click', () => {
     if (APP_STATE.profileParsed) return;
-    simulateParsing();
+    simulateParsingDemo();
   });
 }
 
-function simulateParsing() {
-  const overlay = document.getElementById('parsingOverlay');
-  const steps = overlay.querySelectorAll('.parsing-step');
-  const uploadZone = document.getElementById('uploadZone');
+function processFile(file) {
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    showToast('⚠️ 文件过大，请选择小于10MB的文件');
+    return;
+  }
 
+  const ext = file.name.split('.').pop().toLowerCase();
+  showParsingOverlay(file.name);
+
+  if (ext === 'txt') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = e.target.result;
+      finishParsingWithText(text, file.name);
+    };
+    reader.readAsText(file, 'UTF-8');
+  } else if (ext === 'docx') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const arrayBuffer = e.target.result;
+      mammoth.extractRawText({ arrayBuffer }).then(result => {
+        finishParsingWithText(result.value, file.name);
+      }).catch(() => {
+        showToast('⚠️ Word文档解析失败，请尝试TXT格式');
+        hideParsingOverlay();
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  } else if (ext === 'pdf') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const typedArray = new Uint8Array(e.target.result);
+      pdfjsLib.getDocument({ data: typedArray }).promise.then(pdf => {
+        let fullText = '';
+        const pages = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          pages.push(pdf.getPage(i).then(page => {
+            return page.getTextContent().then(content => {
+              const pageText = content.items.map(item => item.str).join(' ');
+              fullText += pageText + '\n';
+            });
+          }));
+        }
+        return Promise.all(pages).then(() => {
+          finishParsingWithText(fullText, file.name);
+        });
+      }).catch(() => {
+        showToast('⚠️ PDF解析失败，请尝试TXT或DOCX格式');
+        hideParsingOverlay();
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  } else if (ext === 'doc') {
+    showToast('⚠️ 旧版.doc格式暂不支持，请另存为.docx或TXT后重试');
+    hideParsingOverlay();
+  } else {
+    showToast('⚠️ 不支持的文件格式，请上传 PDF/Word/TXT');
+    hideParsingOverlay();
+  }
+}
+
+function showParsingOverlay(fileName) {
+  const overlay = document.getElementById('parsingOverlay');
+  const uploadZone = document.getElementById('uploadZone');
   overlay.classList.add('active');
   uploadZone.style.opacity = '0.5';
   uploadZone.style.pointerEvents = 'none';
 
-  // 步骤动画序列
-  const stepData = [
-    { delay: 200, detail: '正在识别文档格式与内容结构...' },
-    { delay: 1500, detail: '提取教育背景、技能标签、实习经历...' },
-    { delay: 2800, detail: '构建个人专属求职画像...' }
-  ];
+  // 更新步骤详情
+  const steps = overlay.querySelectorAll('.parsing-step');
+  steps.forEach(s => { s.classList.remove('active', 'done'); s.querySelector('.step-icon').innerHTML = s.querySelector('.step-icon').dataset.num || '1'; });
+  steps[0].querySelector('.step-detail').textContent = `正在读取 ${fileName} ...`;
+  steps[0].classList.add('active');
+}
 
-  steps.forEach((step, i) => {
-    step.classList.remove('active', 'done');
-    setTimeout(() => {
-      step.classList.add('active');
-      step.querySelector('.step-detail').textContent = stepData[i].detail;
-    }, stepData[i].delay);
-    setTimeout(() => {
-      step.classList.remove('active');
-      step.classList.add('done');
-      step.querySelector('.step-icon').innerHTML = '✓';
-    }, stepData[i].delay + 1000);
+function finishParsingWithText(text, fileName) {
+  const overlay = document.getElementById('parsingOverlay');
+  const steps = overlay.querySelectorAll('.parsing-step');
+
+  // 步骤1完成
+  steps[0].classList.remove('active'); steps[0].classList.add('done');
+  steps[0].querySelector('.step-icon').innerHTML = '✓';
+  steps[0].querySelector('.step-detail').textContent = `已读取 ${fileName}（${text.length}字符）`;
+
+  // 步骤2
+  setTimeout(() => {
+    steps[1].classList.add('active');
+    steps[1].querySelector('.step-detail').textContent = '提取教育背景、技能标签、实习经历...';
+  }, 600);
+  setTimeout(() => {
+    steps[1].classList.remove('active'); steps[1].classList.add('done');
+    steps[1].querySelector('.step-icon').innerHTML = '✓';
+  }, 1800);
+
+  // 步骤3
+  setTimeout(() => {
+    steps[2].classList.add('active');
+    steps[2].querySelector('.step-detail').textContent = '构建个人专属求职画像...';
+  }, 2000);
+  setTimeout(() => {
+    steps[2].classList.remove('active'); steps[2].classList.add('done');
+    steps[2].querySelector('.step-icon').innerHTML = '✓';
+  }, 3000);
+
+  // 完成
+  setTimeout(() => {
+    overlay.classList.remove('active');
+    renderProfileCardFromText(text);
+    APP_STATE.profileParsed = true;
+    showToast('✅ 简历解析完成！个人求职画像已构建');
+  }, 3400);
+}
+
+function hideParsingOverlay() {
+  const overlay = document.getElementById('parsingOverlay');
+  const uploadZone = document.getElementById('uploadZone');
+  overlay.classList.remove('active');
+  uploadZone.style.opacity = '';
+  uploadZone.style.pointerEvents = '';
+}
+
+// Demo模拟数据（保留原功能）
+function simulateParsingDemo() {
+  showParsingOverlay('Demo简历.pdf');
+  const overlay = document.getElementById('parsingOverlay');
+  const steps = overlay.querySelectorAll('.parsing-step');
+
+  steps[0].querySelector('.step-detail').textContent = '正在识别文档格式与内容结构...';
+  steps[1].querySelector('.step-detail').textContent = '提取教育背景、技能标签、实习经历...';
+  steps[2].querySelector('.step-detail').textContent = '构建个人专属求职画像...';
+
+  [200, 1500, 2800].forEach((delay, i) => {
+    setTimeout(() => { steps[i].classList.add('active'); }, delay);
+    setTimeout(() => { steps[i].classList.remove('active'); steps[i].classList.add('done'); steps[i].querySelector('.step-icon').innerHTML = '✓'; }, delay + 1000);
   });
 
-  // 完成后显示画像
   setTimeout(() => {
     overlay.classList.remove('active');
     renderProfileCard();
@@ -146,6 +283,67 @@ function simulateParsing() {
   }, 4000);
 }
 
+// 基于真实解析文本生成画像
+function renderProfileCardFromText(text) {
+  const extracted = extractInfoFromText(text);
+  const profile = { ...STUDENT_PROFILE, ...extracted };
+  renderProfileCardGeneric(profile, text);
+}
+
+function extractInfoFromText(text) {
+  const result = {};
+  const lines = text.split('\n').filter(l => l.trim());
+
+  // 尝试提取姓名（第一行或包含"姓名"的行）
+  const nameLine = lines.find(l => l.includes('姓名') || l.includes('名字'));
+  if (nameLine) {
+    const m = nameLine.match(/[：:]\s*(.+)/);
+    if (m) result.name = m[1].trim();
+  } else if (lines[0] && lines[0].trim().length <= 6 && !/[a-zA-Z@]/.test(lines[0])) {
+    result.name = lines[0].trim();
+  }
+
+  // 提取学校
+  const schoolLine = lines.find(l => /大学|学院|University|College/i.test(l));
+  if (schoolLine) {
+    const m = schoolLine.match(/([一-龥]+大学[^\s，,]*|[一-龥]+学院[^\s，,]*)/);
+    if (m) result.school = m[1];
+  }
+
+  // 提取专业
+  const majorKeywords = ['计算机', '软件工程', '人工智能', '数据科学', '电子信息', '通信', '自动化', '数学', '统计'];
+  const majorLine = lines.find(l => majorKeywords.some(k => l.includes(k)));
+  if (majorLine) {
+    for (const k of majorKeywords) {
+      if (majorLine.includes(k)) { result.major = majorLine.trim().slice(0, 30); break; }
+    }
+  }
+
+  // 提取技能
+  const skillKeywords = ['Python', 'Java', 'C++', 'Go', 'Rust', 'JavaScript', 'TypeScript', 'SQL', 'MySQL',
+    'Redis', 'Docker', 'Kubernetes', 'Linux', 'Git', 'Spring', 'React', 'Vue', 'Node', 'TensorFlow',
+    'PyTorch', 'Machine Learning', '深度学习', 'NLP', '数据分析', 'Spark', 'Hadoop', 'Kafka'];
+  const foundSkills = [];
+  const lowerText = text.toLowerCase();
+  skillKeywords.forEach(s => {
+    if (lowerText.includes(s.toLowerCase())) foundSkills.push(s);
+  });
+  if (foundSkills.length > 0) {
+    result.skills = foundSkills.slice(0, 12).map(s => ({ name: s, level: 80 }));
+  }
+
+  // 提取邮箱
+  const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  if (emailMatch) result.email = emailMatch[1];
+
+  // 提取手机号
+  const phoneMatch = text.match(/(1[3-9]\d)[-]?\d{4}[-]?\d{4}/);
+  if (phoneMatch) result.phone = phoneMatch[0].replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
+
+  return result;
+}
+
+// 原始Demo画像（完整模拟数据）
 function renderProfileCard() {
   const profile = STUDENT_PROFILE;
   const card = document.getElementById('profileCard');
@@ -199,6 +397,75 @@ function renderProfileCard() {
         ${profile.preference.targetPositions.map(p => `<span class="tag tag-accent">${p}</span>`).join('')}
         <span style="color:var(--text-light);font-size:0.88rem;">
           📍 ${profile.preference.targetCities.join(' / ')} &nbsp;|&nbsp; 💰 ${profile.preference.salaryRange}
+        </span>
+      </div>
+    </div>
+  `;
+  card.classList.add('active');
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// 基于真实解析文本生成画像（通用版）
+function renderProfileCardGeneric(profile, rawText) {
+  const card = document.getElementById('profileCard');
+  const skills = profile.skills || STUDENT_PROFILE.skills;
+  card.innerHTML = `
+    <div class="profile-header">
+      <div class="profile-avatar">${(profile.name || '未') [0]}</div>
+      <div class="profile-info">
+        <h3>${profile.name || '未识别姓名'} <span class="tag tag-primary">${profile.graduateYear || '应届'}</span></h3>
+        <div class="school">${profile.school || '未识别学校'} · ${profile.major || '未识别专业'} · ${profile.degree || '硕士'}</div>
+        <div class="basic">
+          ${profile.email ? `<span>📧 ${profile.email}</span>` : ''}
+          ${profile.phone ? `<span>📱 ${profile.phone}</span>` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="profile-section">
+      <h4>🛠 AI提取技能标签</h4>
+      <div class="skills-cloud">
+        ${skills.map(s => `<span class="skill-tag">${s.name || s}</span>`).join('')}
+      </div>
+    </div>
+    ${profile.internship ? `
+    <div class="profile-section">
+      <h4>💼 实习经历</h4>
+      <div class="experience-card">
+        <div class="exp-header">
+          <span class="role">${profile.internship.company} · ${profile.internship.position}</span>
+          <span class="duration">${profile.internship.duration}</span>
+        </div>
+        <div class="exp-desc">${profile.internship.description}</div>
+      </div>
+    </div>` : ''}
+    ${profile.projects ? `
+    <div class="profile-section">
+      <h4>📂 项目经历</h4>
+      ${profile.projects.map(p => `
+        <div class="experience-card">
+          <div class="exp-header">
+            <span class="role">${p.name}</span>
+            <span class="duration">${p.role}</span>
+          </div>
+          <div class="exp-desc">${p.description}</div>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            ${p.tech.map(t => `<span class="tag tag-primary" style="font-size:0.7rem;">${t}</span>`).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>` : ''}
+    <div class="profile-section">
+      <h4>📋 简历原文（AI已解析）</h4>
+      <div class="experience-card">
+        <div class="exp-desc" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;font-size:0.8rem;">${escapeHtml(rawText.slice(0, 1500))}${rawText.length > 1500 ? '\n...(已截断)' : ''}</div>
+      </div>
+    </div>
+    <div class="profile-section">
+      <h4>🎯 求职意向</h4>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        ${(profile.preference || STUDENT_PROFILE.preference).targetPositions.map(p => `<span class="tag tag-accent">${p}</span>`).join('')}
+        <span style="color:var(--text-light);font-size:0.88rem;">
+          📍 ${(profile.preference || STUDENT_PROFILE.preference).targetCities.join(' / ')}
         </span>
       </div>
     </div>
