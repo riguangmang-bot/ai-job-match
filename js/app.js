@@ -297,36 +297,64 @@ function extractInfoFromText(text) {
   // --- 姓名 ---
   // 辅助函数: 从字符串中提取中文名（处理PDF空格问题）
   function tryExtractChineseName(str) {
-    // 去掉所有空格（PDF经常把"张 三"拆成两个字符）
     const compact = str.replace(/\s+/g, '');
-    // 去掉常见前缀
     const clean = compact.replace(/^(姓名|名字|我是|我叫|本人)\s*[：:]*\s*/i, '');
-    // 尝试匹配2-4个连续中文字符
     const m = clean.match(/[一-鿿]{2,4}/);
     if (m) return m[0];
-    // 也尝试匹配带·的复姓名（如"欧阳·娜娜"）
     const m2 = clean.match(/[一-鿿]{1,2}·[一-鿿]{1,3}/);
     if (m2) return m2[0];
     return null;
   }
 
-  // 策略1: "姓名：xxx" 或 "姓名 xxx" 模式
-  const nameLabelLine = cleanLines.find(l => /姓名/i.test(l));
-  if (nameLabelLine) {
-    const name = tryExtractChineseName(nameLabelLine);
-    if (name) result.name = name;
+  // 标签行检测：排除简历模板中的字段名
+  function isLabelLine(str) {
+    const compact = str.replace(/\s+/g, '');
+    const labels = /^(姓名|性别|年龄|民族|籍贯|电话|邮箱|毕业院校|学历|专业|学校|住址|地址|出生日期|政治面貌|身高|体重|QQ|微信|网址|英语等级|外语水平|证书|求职意向|期望薪资|到岗时间)$/i;
+    if (labels.test(compact)) return true;
+    return false;
   }
 
-  // 策略2: 前几行中查找可能是名字的纯中文片段
+  // 策略1: 找到"姓名"标签行，提取同一行或下一行的名字
+  for (let i = 0; i < cleanLines.length; i++) {
+    const l = cleanLines[i];
+    const compact = l.replace(/\s+/g, '');
+    if (/姓名/.test(compact)) {
+      // 先尝试同行提取：从行中去掉"姓名"标签部分，再看剩余是否有名字
+      const remainder = l.replace(/\s+/g, '').replace(/^姓名[：:]*\s*/, '');
+      if (remainder && remainder !== l.replace(/\s+/g, '')) {
+        const nameInLine = tryExtractChineseName(remainder);
+        if (nameInLine && nameInLine !== '姓名') {
+          result.name = nameInLine; break;
+        }
+      }
+      // 否则检查下一行
+      if (i + 1 < cleanLines.length) {
+        const nextLine = cleanLines[i + 1];
+        if (!isLabelLine(nextLine)) {
+          const nameNext = tryExtractChineseName(nextLine);
+          if (nameNext) { result.name = nameNext; break; }
+        }
+      }
+      // 再检查下下行
+      if (!result.name && i + 2 < cleanLines.length) {
+        const nextLine2 = cleanLines[i + 2];
+        if (!isLabelLine(nextLine2)) {
+          const nameNext2 = tryExtractChineseName(nextLine2);
+          if (nameNext2) { result.name = nameNext2; break; }
+        }
+      }
+    }
+  }
+
+  // 策略2: 前几行中查找可能是名字的纯中文片段（排除标签行）
   if (!result.name) {
-    for (let i = 0; i < Math.min(8, cleanLines.length); i++) {
+    for (let i = 0; i < Math.min(10, cleanLines.length); i++) {
       const l = cleanLines[i];
-      // 跳过明显不是名字的行（包含"简历"/"个人"/"联系"/"电话"/"邮箱"/"地址"等）
-      if (/简历|个人|联系|电话|邮箱|地址|求职|应聘|RESUME|CV|籍贯|民族|出生/.test(l)) continue;
-      // 跳过主要是英文的行
-      if (/^[A-Za-z\s]{3,}$/.test(l)) continue;
+      if (isLabelLine(l)) continue;
+      if (/简历|个人|联系|电话|邮箱|地址|求职|应聘|RESUME|CV|籍贯|民族|出生|教育|经历|项目|技能|实习|工作/i.test(l)) continue;
+      if (/^[A-Za-z\s\d]{3,}$/.test(l)) continue;
       const name = tryExtractChineseName(l);
-      if (name && name.length >= 2 && name.length <= 4) {
+      if (name && name.length >= 2 && name.length <= 4 && name !== '姓名') {
         result.name = name;
         break;
       }
@@ -335,16 +363,16 @@ function extractInfoFromText(text) {
 
   // 策略3: "我是/我叫 xxx" 模式
   if (!result.name) {
-    const selfIntroLine = cleanLines.find(l => /我是|我叫|本人/i.test(l));
+    const selfIntroLine = cleanLines.find(l => /我是|我叫|本人/.test(l));
     if (selfIntroLine) {
       const name = tryExtractChineseName(selfIntroLine);
-      if (name) result.name = name;
+      if (name && name !== '姓名') result.name = name;
     }
   }
 
-  // 策略4: 全文中任何"姓名：xxx"或"名字：xxx"的模式（不限行首）
+  // 策略4: 全文中 "姓名：xxx" 或 "姓名 xxx" 模式
   if (!result.name) {
-    const m = text.match(/姓名\s*[：:]\s*([一-鿿]{2,4})(?:\s|$|，|。|,|\.|\n)/);
+    const m = text.replace(/\s+/g, '').match(/姓名[：:]\s*([一-鿿]{2,4})/);
     if (m) result.name = m[1];
   }
 
