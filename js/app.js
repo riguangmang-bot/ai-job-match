@@ -5,6 +5,9 @@
 // ==================== 全局状态 ====================
 const APP_STATE = {
   profileParsed: false,
+  isRealProfile: false,          // 是否真实上传的简历
+  extractedProfile: null,         // 真实提取的数据
+  adjustedJobs: null,             // 基于真实数据调整后的岗位
   selectedJobId: null,
   filterIndustry: 'all',
   filterCity: 'all',
@@ -168,6 +171,10 @@ function processFile(file) {
     };
     reader.readAsArrayBuffer(file);
   } else if (ext === 'pdf') {
+    // 配置 pdf.js worker（只需配置一次）
+    if (typeof pdfjsLib !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    }
     const reader = new FileReader();
     reader.onload = e => {
       const typedArray = new Uint8Array(e.target.result);
@@ -177,16 +184,36 @@ function processFile(file) {
         for (let i = 1; i <= pdf.numPages; i++) {
           pages.push(pdf.getPage(i).then(page => {
             return page.getTextContent().then(content => {
-              const pageText = content.items.map(item => item.str).join(' ');
-              fullText += pageText + '\n';
+              // 智能拼接: 单汉字不加空格，英文单词保留空格
+              const chars = [];
+              content.items.forEach(item => {
+                const s = item.str;
+                if (!s) return;
+                const prev = chars[chars.length - 1];
+                // 如果前后都是单汉字/中文标点，不加空格
+                if (prev && /^[一-鿿　-〿＀-￯]$/.test(prev) && /^[一-鿿　-〿＀-￯]$/.test(s)) {
+                  chars.push(s);
+                } else if (prev && !prev.endsWith(' ') && !s.startsWith(' ')) {
+                  chars.push(' ' + s);
+                } else {
+                  chars.push(s);
+                }
+              });
+              fullText += chars.join('') + '\n';
             });
           }));
         }
         return Promise.all(pages).then(() => {
-          finishParsingWithText(fullText, file.name);
+          if (fullText.trim().length < 10) {
+            showToast('⚠️ PDF内容过短，可能是扫描件或图片型PDF，请尝试DOCX/TXT格式');
+            hideParsingOverlay();
+          } else {
+            finishParsingWithText(fullText, file.name);
+          }
         });
-      }).catch(() => {
-        showToast('⚠️ PDF解析失败，请尝试TXT或DOCX格式');
+      }).catch(err => {
+        console.error('PDF parse error:', err);
+        showToast('⚠️ PDF解析失败（可能是加密或扫描件），请尝试TXT或DOCX格式');
         hideParsingOverlay();
       });
     };
@@ -246,9 +273,12 @@ function finishParsingWithText(text, fileName) {
   // 完成
   setTimeout(() => {
     overlay.classList.remove('active');
-    renderProfileCardFromText(text);
+    const extracted = renderProfileCardFromText(text);
+    applyProfileToMatching(extracted);
     APP_STATE.profileParsed = true;
-    showToast('✅ 简历解析完成！个人求职画像已构建');
+    renderJobList();  // 用真实数据重新渲染岗位
+    updateDiagnosisWithProfile(extracted);
+    showToast('✅ 简历解析完成！岗位匹配已同步更新');
   }, 3400);
 }
 
@@ -279,14 +309,129 @@ function simulateParsingDemo() {
     overlay.classList.remove('active');
     renderProfileCard();
     APP_STATE.profileParsed = true;
-    showToast('✅ AI解析完成！个人求职画像已构建');
+    APP_STATE.isRealProfile = false;
+    APP_STATE.adjustedJobs = null;
+    APP_STATE.extractedProfile = null;
+    renderJobList();  // 恢复原始Demo数据
+    initDiagnosisPage();  // 恢复原始诊断数据
+    showToast('✅ Demo数据已加载');
   }, 4000);
+}
+
+// 将提取的真实简历数据应用到岗位匹配系统
+function applyProfileToMatching(extracted) {
+  const profile = extracted;
+  const adjusted = JOB_LIST.map(job => {
+    // 深拷贝岗位数据
+    const adj = JSON.parse(JSON.stringify(job));
+
+    // --- 重新计算四维匹配分 ---
+    // 专业匹配度：基于学历
+    const degreeMap = { '博士': 100, '硕士': 88, '本科': 75, '专科': 60 };
+    const reqDegree = job.jd['专业要求'] || '';
+    const userDegree = profile.degree || '本科';
+    let degreeScore = degreeMap[userDegree] || 75;
+    if (reqDegree.includes('博士') && userDegree !== '博士') degreeScore = Math.min(degreeScore, 70);
+    if (reqDegree.includes('硕士') && userDegree === '本科') degreeScore = Math.min(degreeScore, 75);
+
+    // 学校加成
+    let schoolBonus = 0;
+    const school = profile.school || '';
+    if (/清华|北大|浙大|上海交大|中科大|复旦|南大|哈工大|西安交大|华科|武大|同济|北航|北理|中山|东南|天津|南开|厦门|国科大/i.test(school)) {
+      schoolBonus = 8;
+    } else if (/大学|学院/i.test(school)) {
+      schoolBonus = 3;
+    }
+
+    // 技能适配度
+    const userSkills = (profile.skills || []).map(s => (s.name || s).toLowerCase());
+    const jdSkills = job.jd['技能要求'].toLowerCase();
+    let skillHits = 0;
+    let skillTotal = 0;
+    const techKeywords = ['python', 'java', 'go', 'golang', 'c\\+\\+', 'rust', 'javascript', 'typescript',
+      'sql', 'mysql', 'postgresql', 'redis', 'mongodb', 'docker', 'kubernetes', 'k8s', 'linux',
+      'git', 'spring', 'springboot', 'mybatis', 'react', 'vue', 'node', 'tensorflow', 'pytorch',
+      'machine learning', '深度学习', 'nlp', 'spark', 'hadoop', 'kafka', 'rabbitmq', 'nginx',
+      '分布式', '微服务', '高并发', '消息队列', 'elasticsearch'];
+    techKeywords.forEach(k => {
+      if (jdSkills.includes(k)) {
+        skillTotal++;
+        if (userSkills.some(us => us.includes(k) || k.includes(us))) skillHits++;
+      }
+    });
+    const skillScore = skillTotal > 0 ? Math.round((skillHits / skillTotal) * 100) : 70;
+    const adjustedSkillScore = Math.min(100, Math.max(40, skillScore));
+
+    // 经历契合度：基于检测到的公司
+    let expBonus = 0;
+    if (profile.internshipDetected && profile.internshipDetected.length > 0) {
+      expBonus = 8;
+      const bigTech = ['字节跳动', '腾讯', '阿里巴巴', '阿里', '百度', '美团', '京东', '华为', '小米', '网易', '快手'];
+      const hasBigTech = profile.internshipDetected.some(s => bigTech.some(b => s.includes(b)));
+      if (hasBigTech) expBonus = 15;
+    }
+
+    // 重新计算各维度
+    adj.dimensions = {
+      专业匹配度: Math.min(100, degreeScore + schoolBonus),
+      技能适配度: adjustedSkillScore,
+      经历契合度: Math.min(100, 55 + expBonus),
+      软实力匹配度: Math.min(100, 60 + (profile.internshipDetected ? 15 : 5) + (profile.skills && profile.skills.length > 5 ? 10 : 0))
+    };
+
+    // 重新计算总分
+    const weights = { 专业匹配度: 0.30, 技能适配度: 0.30, 经历契合度: 0.25, 软实力匹配度: 0.15 };
+    adj.matchScore = Math.round(
+      Object.entries(adj.dimensions).reduce((sum, [k, v]) => sum + v * (weights[k] || 0.25), 0)
+    );
+
+    // 更新匹配标签
+    if (adj.matchScore >= 85) { adj.matchLabel = '极高匹配'; adj.tag = '强烈推荐'; }
+    else if (adj.matchScore >= 75) { adj.matchLabel = '高度匹配'; adj.tag = '推荐'; }
+    else if (adj.matchScore >= 65) { adj.matchLabel = '中度匹配'; adj.tag = '可投递'; }
+    else { adj.matchLabel = '低度匹配'; adj.tag = '备选'; }
+
+    // --- 重新生成匹配亮点 ---
+    const hl = [];
+    if (profile.degree) {
+      const degOk = (reqDegree.includes('硕士') && profile.degree === '硕士') ||
+                    (reqDegree.includes('博士') && profile.degree === '博士');
+      if (degOk) hl.push(`${profile.degree}学历与岗位要求高度匹配`);
+      else if (reqDegree.includes('硕士') && profile.degree === '本科') {
+        hl.push('学历为本科，建议通过实习/项目经验弥补硕士学历差距');
+      } else if (reqDegree.includes('硕士及以上') && profile.degree === '硕士') {
+        hl.push(`${profile.degree}学历满足岗位基本要求`);
+      }
+    }
+    if (profile.school) hl.push(`${profile.school}计算机专业背景`);
+    if (adjustedSkillScore >= 80) {
+      const matchedSkills = techKeywords.filter(k => userSkills.some(us => us.includes(k) || k.includes(us))).slice(0, 4);
+      if (matchedSkills.length > 0) hl.push(`核心技能覆盖: ${matchedSkills.join('、')}`);
+    } else {
+      hl.push(`技能匹配度${adjustedSkillScore}%，建议补充岗位要求的关键技术栈`);
+    }
+    if (profile.internshipDetected && profile.internshipDetected.length > 0) {
+      hl.push(`有${profile.internshipDetected.length}段实习/项目经历`);
+    } else {
+      hl.push('建议增加相关实习或项目经验');
+    }
+    adj.highlights = hl;
+
+    return adj;
+  });
+
+  // 按新分数排序
+  adjusted.sort((a, b) => b.matchScore - a.matchScore);
+  APP_STATE.adjustedJobs = adjusted;
+  APP_STATE.isRealProfile = true;
+  APP_STATE.extractedProfile = profile;
 }
 
 // 基于真实解析文本生成画像
 function renderProfileCardFromText(text) {
   const extracted = extractInfoFromText(text);
   renderProfileCardReal(extracted, text);
+  return extracted;
 }
 
 function extractInfoFromText(text) {
@@ -615,7 +760,9 @@ function initJobCards() {
 
 function renderJobList() {
   const container = document.getElementById('jobList');
-  let jobs = [...JOB_LIST];
+  // 真实简历用调整后的数据，Demo用原始数据
+  const source = (APP_STATE.isRealProfile && APP_STATE.adjustedJobs) ? APP_STATE.adjustedJobs : JOB_LIST;
+  let jobs = [...source];
 
   // 筛选
   if (APP_STATE.filterIndustry !== 'all') {
@@ -939,11 +1086,29 @@ function initDiagnosisPage() {
   });
 }
 
+// 用真实简历数据更新诊断（全局更新）
+function updateDiagnosisWithProfile(extracted) {
+  // 更新诊断摘要
+  const summaryEl = document.getElementById('diagnosisSummary');
+  if (summaryEl && extracted) {
+    const name = extracted.name || '您';
+    const degree = extracted.degree || '未知';
+    const school = extracted.school || '未知院校';
+    const skillCount = (extracted.skills || []).length;
+    summaryEl.textContent = `${name}（${school}，${degree}），AI已基于您的真实简历重新计算所有岗位匹配分数。共提取${skillCount}项技能标签，请查看下方更新后的匹配分析。`;
+  }
+
+  // 选择最佳匹配岗位更新雷达图
+  if (APP_STATE.adjustedJobs && APP_STATE.adjustedJobs.length > 0) {
+    updateDiagnosisForJob(APP_STATE.adjustedJobs[0]);
+  }
+}
+
 function updateDiagnosisForJob(job) {
-  // 模拟更新：用岗位的实际维度数据
   const dims = Object.values(job.dimensions);
-  const student = [95, 93, 90, 88]; // 学生数据不变
-  const requirement = [Math.min(dims[0] + 5, 100), Math.min(dims[1] + 7, 100), Math.min(dims[2] + 10, 100), Math.min(dims[3] + 12, 100)];
+  const student = Object.values(job.dimensions);
+
+  const requirement = [Math.min(dims[0] + 8, 100), Math.min(dims[1] + 10, 100), Math.min(dims[2] + 12, 100), Math.min(dims[3] + 10, 100)];
 
   if (APP_STATE.charts.diagnosisRadar) {
     APP_STATE.charts.diagnosisRadar.setOption({
@@ -960,6 +1125,24 @@ function updateDiagnosisForJob(job) {
   const gradeEl = document.getElementById('diagnosisGrade');
   gradeEl.textContent = gradeLabel;
   gradeEl.className = `tag tag-grade tag-grade-${grade.toLowerCase()}`;
+
+  // 更新岗位名称
+  const nameEl = document.getElementById('selectedJobName');
+  if (nameEl) nameEl.textContent = `${job.company} - ${job.position}`;
+
+  // 更新JD
+  const jdEl = document.getElementById('selectedJobJD');
+  if (jdEl) jdEl.textContent = job.jd['技能要求'];
+
+  // 更新亮点
+  const strengthsEl = document.getElementById('diagnosisStrengths');
+  if (strengthsEl && job.highlights) {
+    strengthsEl.innerHTML = job.highlights.slice(0, 4).map(h => `
+      <div class="weakness-item" style="border-left-color:var(--accent);">
+        <div class="w-title" style="color:var(--accent);">✅ ${h}</div>
+      </div>
+    `).join('');
+  }
 }
 
 // ==================== 滚动动画 ====================
