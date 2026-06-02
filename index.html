@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI求职智能匹配智能体</title>
+  <meta name="description" content="AI驱动的求职智能匹配平台，实现岗位精准匹配、简历智能诊断、定向优化赋能">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- ECharts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+
+  <!-- ========== 导航栏 ========== -->
+  <nav class="navbar">
+    <div class="container">
+      <a href="#" class="nav-logo">
+        <span class="logo-icon">🎯</span>
+        <span>AI求职匹配</span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#upload">画像构建</a></li>
+        <li><a href="#matching">岗位匹配</a></li>
+        <li><a href="#diagnosis">简历诊断</a></li>
+        <li><a href="#optimization">简历优化</a></li>
+        <li><a href="#dashboard">数据复盘</a></li>
+      </ul>
+      <div class="nav-cta">
+        <button class="btn btn-primary btn-sm" data-scroll-to="upload">开始体验</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ========== Toast ========== -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ========== Hero 区 ========== -->
+  <section class="hero" id="hero">
+    <div class="container">
+      <div class="hero-text">
+        <div class="hero-badge">
+          <span class="dot"></span> AI驱动 · 智能匹配 · Demo体验版
+        </div>
+        <h1>AI求职智能匹配智能体</h1>
+        <p>
+          岗位精准匹配 · 简历智能诊断 · 定向优化赋能<br>
+          语义级智能匹配，摒弃传统关键词模糊搜索，让每一份简历都能精准触达心仪岗位。
+        </p>
+        <div class="hero-actions">
+          <button class="btn btn-primary btn-lg" data-scroll-to="upload">
+            🚀 立即体验Demo
+          </button>
+          <button class="btn btn-outline btn-lg" data-scroll-to="matching">
+            查看匹配演示 →
+          </button>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="hero-card-stack">
+          <div class="hero-card">
+            <div class="match-big">92%</div>
+            <div class="match-label">综合匹配度</div>
+            <div class="company-name">字节跳动 · 后端开发工程师</div>
+            <div style="margin-top:8px;font-size:0.85rem;color:var(--accent);">✅ 极高匹配</div>
+            <div style="margin-top:12px;display:flex;gap:8px;">
+              <span class="tag tag-primary">专业匹配 95</span>
+              <span class="tag tag-accent">技能适配 93</span>
+            </div>
+          </div>
+          <div class="hero-card">
+            <div class="match-big">88%</div>
+            <div class="match-label">综合匹配度</div>
+            <div class="company-name">腾讯 · 后台开发工程师</div>
+          </div>
+          <div class="hero-card">
+            <div class="match-big">85%</div>
+            <div class="match-label">综合匹配度</div>
+            <div class="company-name">阿里巴巴 · Java开发工程师</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 三大核心能力卡片 -->
+    <div class="container" style="position:relative;z-index:2;">
+      <div class="feature-grid">
+        <div class="feature-card animate-in">
+          <div class="icon-circle">🎯</div>
+          <h3>精准岗位匹配</h3>
+          <p>基于多维语义向量建模，综合专业、技能、经历、软实力四大维度智能匹配，按匹配度排序推送高适配岗位</p>
+        </div>
+        <div class="feature-card animate-in" style="animation-delay:0.1s;">
+          <div class="icon-circle">🔍</div>
+          <h3>简历智能诊断</h3>
+          <p>量化匹配分数+短板定位，精准识别技能缺失、经历不贴合、关键词遗漏等核心问题</p>
+        </div>
+        <div class="feature-card animate-in" style="animation-delay:0.2s;">
+          <div class="icon-circle">✨</div>
+          <h3>定向优化赋能</h3>
+          <p>AI生成个性化优化方案，包括经历重构、关键词植入、话术润色，贴合企业HR筛选标准</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== Section 1: 简历上传与画像构建 ========== -->
+  <section class="section" id="upload">
+    <div class="container">
+      <h2 class="section-title">📄 简历上传与画像构建</h2>
+      <p class="section-subtitle">上传简历，AI自动解析并构建专属求职画像，支持PDF/Word格式</p>
+
+      <!-- 上传区域 -->
+      <div class="upload-zone" id="uploadZone">
+        <div class="upload-icon">📤</div>
+        <h3>点击上传简历文件</h3>
+        <p class="hint">支持 PDF、Word 格式，文件大小不超过 5MB</p>
+        <p class="hint" style="margin-top:4px;color:var(--primary);">（Demo已预置简历数据，点击即可体验）</p>
+      </div>
+
+      <!-- AI解析动画 -->
+      <div class="parsing-overlay" id="parsingOverlay">
+        <h4 style="margin-bottom:20px;">🤖 AI解析中...</h4>
+        <div class="parsing-steps">
+          <div class="parsing-step">
+            <span class="step-icon">1</span>
+            <div>
+              <div class="step-text">文档识别与解析</div>
+              <div class="step-detail"></div>
+            </div>
+          </div>
+          <div class="parsing-step">
+            <span class="step-icon">2</span>
+            <div>
+              <div class="step-text">信息提取与结构化</div>
+              <div class="step-detail"></div>
+            </div>
+          </div>
+          <div class="parsing-step">
+            <span class="step-icon">3</span>
+            <div>
+              <div class="step-text">求职画像构建</div>
+              <div class="step-detail"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 画像卡片 -->
+      <div class="profile-card" id="profileCard"></div>
+    </div>
+  </section>
+
+  <!-- ========== Section 2: 智能岗位精准匹配 ========== -->
+  <section class="section" id="matching">
+    <div class="container">
+      <h2 class="section-title">🎯 智能岗位精准匹配</h2>
+      <p class="section-subtitle">基于个人求职画像，语义级匹配海量岗位，按匹配度智能排序</p>
+
+      <!-- 筛选条 -->
+      <div class="filter-bar">
+        <select class="filter-select" id="filterIndustry">
+          <option value="all">全部行业</option>
+          <option value="互联网">互联网</option>
+          <option value="ICT">ICT</option>
+          <option value="金融/国企">金融/国企</option>
+          <option value="能源/国企">能源/国企</option>
+        </select>
+        <select class="filter-select" id="filterCity">
+          <option value="all">全部城市</option>
+          <option value="北京">北京</option>
+          <option value="上海">上海</option>
+          <option value="深圳">深圳</option>
+          <option value="杭州">杭州</option>
+        </select>
+        <select class="filter-select" id="filterType">
+          <option value="all">全部类型</option>
+          <option value="校招">校招</option>
+          <option value="社招">社招</option>
+        </select>
+      </div>
+
+      <!-- 匹配统计 -->
+      <div class="match-summary">
+        <div class="stat"><div class="num" id="totalJobs">10</div><div class="lbl">匹配岗位</div></div>
+        <div class="stat"><div class="num" id="highMatchCount">6</div><div class="lbl">高匹配(≥80分)</div></div>
+        <div class="stat"><div class="num" id="avgMatchScore">76</div><div class="lbl">平均匹配分</div></div>
+      </div>
+
+      <!-- 岗位列表 -->
+      <div class="job-list" id="jobList"></div>
+    </div>
+  </section>
+
+  <!-- ========== Section 3: 简历匹配量化诊断 ========== -->
+  <section class="section" id="diagnosis">
+    <div class="container">
+      <h2 class="section-title">🔬 简历匹配量化诊断</h2>
+      <p class="section-subtitle">深度分析简历与岗位的匹配度，精准定位短板，输出百分制匹配分数</p>
+
+      <!-- 岗位选择 -->
+      <div style="text-align:center;margin-bottom:32px;">
+        <span style="font-size:0.95rem;color:var(--text-secondary);margin-right:12px;">诊断岗位：</span>
+        <span id="selectedJobName" style="font-weight:600;">字节跳动 - 后端开发工程师（抖音电商）</span>
+        <span style="margin-left:16px;font-size:0.85rem;color:var(--text-light);">
+          （也可在岗位匹配区点击卡片切换）
+        </span>
+      </div>
+
+      <div class="diagnosis-container">
+        <!-- 左：JD要求 -->
+        <div class="diagnosis-card">
+          <h4>📋 岗位JD要求</h4>
+          <div class="jd-section">
+            <div class="jd-label">专业要求</div>
+            <div class="jd-text">计算机科学、软件工程或相关专业硕士及以上学历</div>
+          </div>
+          <div class="jd-section">
+            <div class="jd-label">技能要求</div>
+            <div class="jd-text" id="selectedJobJD">精通Go/Python/Java至少一种，熟悉MySQL、Redis、消息队列等中间件，了解分布式系统设计，有高并发系统开发经验</div>
+          </div>
+          <div class="jd-section">
+            <div class="jd-label">经验要求</div>
+            <div class="jd-text">有互联网公司后端开发实习经验，参与过大规模系统开发或优化项目</div>
+          </div>
+          <div class="jd-section">
+            <div class="jd-label">素质要求</div>
+            <div class="jd-text">良好的系统设计能力和问题分析能力，具备团队协作精神，有较强的学习能力和技术热情</div>
+          </div>
+        </div>
+
+        <!-- 右：诊断结果 -->
+        <div class="diagnosis-card">
+          <h4>📊 AI诊断结果</h4>
+          <!-- 总分 -->
+          <div class="overall-score-display">
+            <div class="big-score" id="diagnosisOverallScore">92</div>
+            <div class="score-info">
+              <h5><span class="tag tag-grade tag-grade-a" id="diagnosisGrade">优秀</span></h5>
+              <p>综合加权匹配得分</p>
+            </div>
+          </div>
+
+          <!-- 雷达图 -->
+          <div class="radar-container" id="diagnosisRadar"></div>
+
+          <!-- 诊断摘要 -->
+          <div class="diagnosis-summary" id="diagnosisSummary"></div>
+
+          <!-- 匹配优势 -->
+          <div class="weakness-list">
+            <h5>✅ 匹配优势</h5>
+            <div id="diagnosisStrengths"></div>
+          </div>
+
+          <!-- 短板分析 -->
+          <div class="weakness-list">
+            <h5>⚠️ 待提升短板</h5>
+            <div id="diagnosisWeaknesses"></div>
+          </div>
+
+          <!-- 关键词缺失 -->
+          <div class="keyword-gaps">
+            <h5>🔑 简历关键词优化建议</h5>
+            <div id="diagnosisKeywords"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== Section 4: 简历优化方案 ========== -->
+  <section class="section" id="optimization">
+    <div class="container">
+      <h2 class="section-title">✨ 定制化简历优化</h2>
+      <p class="section-subtitle">AI根据岗位JD要求与诊断结果，生成个性化优化方案</p>
+
+      <!-- 优化前后对比 -->
+      <div class="compare-container">
+        <div class="compare-panel before">
+          <span class="panel-label">优化前</span>
+          <h4>📝 原始简历</h4>
+          <div id="beforeResume"></div>
+        </div>
+        <div class="compare-panel after">
+          <span class="panel-label">优化后</span>
+          <h4>✨ AI优化版简历</h4>
+          <div id="afterResume"></div>
+        </div>
+      </div>
+
+      <!-- 优化建议详情 -->
+      <div class="suggestions-section">
+        <h4>💡 详细优化建议</h4>
+        <div id="suggestionsList"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== Section 5: 求职数据复盘 ========== -->
+  <section class="section" id="dashboard">
+    <div class="container">
+      <h2 class="section-title">📈 求职数据复盘</h2>
+      <p class="section-subtitle">记录匹配与优化历程，持续迭代求职画像，提升岗位匹配精准度</p>
+
+      <!-- 统计卡片 -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">📨</div>
+          <div class="stat-value" id="statApplications">28</div>
+          <div class="stat-label">总投递岗位数</div>
+          <div class="stat-change up">↑ 15% 较上周</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🎯</div>
+          <div class="stat-value" id="statMatchRate">76%</div>
+          <div class="stat-label">高匹配率</div>
+          <div class="stat-change up">↑ 8% 较上周</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">✨</div>
+          <div class="stat-value" id="statOptCount">8</div>
+          <div class="stat-label">简历优化次数</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📊</div>
+          <div class="stat-value" id="statAvgScore">79</div>
+          <div class="stat-label">当前平均匹配分</div>
+          <div class="stat-change up">↑ 11分 初始68分</div>
+        </div>
+      </div>
+
+      <!-- 图表区 -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h4>📈 匹配分数趋势</h4>
+          <div class="chart-container" id="chartScoreTrend"></div>
+        </div>
+        <div class="chart-card">
+          <h4>📊 投递行业分布</h4>
+          <div class="chart-container" id="chartIndustry"></div>
+        </div>
+        <div class="chart-card chart-full">
+          <h4>🔄 简历优化前后技能提升对比</h4>
+          <div class="chart-container" id="chartSkillRadar"></div>
+        </div>
+      </div>
+
+      <!-- 历史记录 -->
+      <div class="history-table-card">
+        <h4>📋 近期操作记录</h4>
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>操作类型</th>
+              <th>详情</th>
+              <th>效果</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== Footer ========== -->
+  <footer class="footer">
+    <div class="container">
+      <p>© 2026 <strong>AI求职智能匹配智能体</strong> — Demo体验版 · 模拟数据仅供展示</p>
+      <p style="margin-top:4px;font-size:0.8rem;">基于 大语言模型 + 向量检索 技术架构 | 岗位匹配 · 简历诊断 · 智能优化 · 数据复盘</p>
+    </div>
+  </footer>
+
+  <!-- ========== 详情弹窗 ========== -->
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal">
+      <button class="modal-close" id="modalClose">✕</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <!-- ========== JS ========== -->
+  <script src="js/data.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
