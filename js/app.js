@@ -286,64 +286,121 @@ function simulateParsingDemo() {
 // 基于真实解析文本生成画像
 function renderProfileCardFromText(text) {
   const extracted = extractInfoFromText(text);
-  const profile = { ...STUDENT_PROFILE, ...extracted };
-  renderProfileCardGeneric(profile, text);
+  renderProfileCardReal(extracted, text);
 }
 
 function extractInfoFromText(text) {
   const result = {};
   const lines = text.split('\n').filter(l => l.trim());
+  const cleanLines = lines.map(l => l.trim()).filter(l => l.length > 1);
 
-  // 尝试提取姓名（第一行或包含"姓名"的行）
-  const nameLine = lines.find(l => l.includes('姓名') || l.includes('名字'));
-  if (nameLine) {
-    const m = nameLine.match(/[：:]\s*(.+)/);
-    if (m) result.name = m[1].trim();
-  } else if (lines[0] && lines[0].trim().length <= 6 && !/[a-zA-Z@]/.test(lines[0])) {
-    result.name = lines[0].trim();
+  // --- 姓名 ---
+  // 策略1: "姓名：xxx" 模式
+  const nameLabelLine = cleanLines.find(l => /姓名\s*[：:]/i.test(l));
+  if (nameLabelLine) {
+    const m = nameLabelLine.match(/姓名\s*[：:]\s*(.+)/i);
+    if (m) {
+      const candidate = m[1].trim().replace(/[，。,.\s].*$/, '').slice(0, 6);
+      if (candidate.length >= 2 && /^[一-鿿]{2,4}$/.test(candidate)) result.name = candidate;
+    }
   }
-
-  // 提取学校
-  const schoolLine = lines.find(l => /大学|学院|University|College/i.test(l));
-  if (schoolLine) {
-    const m = schoolLine.match(/([一-龥]+大学[^\s，,]*|[一-龥]+学院[^\s，,]*)/);
-    if (m) result.school = m[1];
+  // 策略2: 第一行是纯中文名（2-4字，无标点英文字母）
+  if (!result.name) {
+    for (let i = 0; i < Math.min(5, cleanLines.length); i++) {
+      const l = cleanLines[i];
+      if (/^[一-鿿]{2,4}$/.test(l) && !/[：:，。、\s\d]/.test(l)) {
+        result.name = l;
+        break;
+      }
+    }
   }
-
-  // 提取专业
-  const majorKeywords = ['计算机', '软件工程', '人工智能', '数据科学', '电子信息', '通信', '自动化', '数学', '统计'];
-  const majorLine = lines.find(l => majorKeywords.some(k => l.includes(k)));
-  if (majorLine) {
-    for (const k of majorKeywords) {
-      if (majorLine.includes(k)) { result.major = majorLine.trim().slice(0, 30); break; }
+  // 策略3: 包含"名字"或常见前缀
+  if (!result.name) {
+    const prefixLine = cleanLines.find(l => /^(姓名|名字|我是|我叫|本人)\s*[：:]*/i.test(l));
+    if (prefixLine) {
+      const m = prefixLine.replace(/^(姓名|名字|我是|我叫|本人)\s*[：:]*\s*/i, '').match(/^[一-鿿]{2,4}/);
+      if (m) result.name = m[0];
     }
   }
 
-  // 提取技能
-  const skillKeywords = ['Python', 'Java', 'C++', 'Go', 'Rust', 'JavaScript', 'TypeScript', 'SQL', 'MySQL',
-    'Redis', 'Docker', 'Kubernetes', 'Linux', 'Git', 'Spring', 'React', 'Vue', 'Node', 'TensorFlow',
-    'PyTorch', 'Machine Learning', '深度学习', 'NLP', '数据分析', 'Spark', 'Hadoop', 'Kafka'];
-  const foundSkills = [];
-  const lowerText = text.toLowerCase();
-  skillKeywords.forEach(s => {
-    if (lowerText.includes(s.toLowerCase())) foundSkills.push(s);
-  });
-  if (foundSkills.length > 0) {
-    result.skills = foundSkills.slice(0, 12).map(s => ({ name: s, level: 80 }));
+  // --- 学校 ---
+  for (const l of cleanLines) {
+    const m = l.match(/([一-鿿]{2,6}(大学|学院)[^\s，,]*)/);
+    if (m) { result.school = m[1]; break; }
   }
 
-  // 提取邮箱
-  const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-  if (emailMatch) result.email = emailMatch[1];
+  // --- 专业 ---
+  const majorKw = ['计算机科学与技术', '计算机科学', '软件工程', '人工智能', '数据科学', '大数据',
+    '电子信息工程', '通信工程', '自动化', '信息安全', '网络工程', '物联网', '数学与应用数学', '统计学'];
+  for (const l of cleanLines) {
+    for (const k of majorKw) {
+      if (l.includes(k)) { result.major = k; break; }
+    }
+    if (result.major) break;
+  }
 
-  // 提取手机号
-  const phoneMatch = text.match(/(1[3-9]\d)[-]?\d{4}[-]?\d{4}/);
-  if (phoneMatch) result.phone = phoneMatch[0].replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
+  // --- 学历 ---
+  if (/博士|Ph\.?D/i.test(text)) result.degree = '博士';
+  else if (/硕士|研究生|Master/i.test(text)) result.degree = '硕士';
+  else if (/本科|学士|Bachelor|B\.S\.|B\.A\./i.test(text)) result.degree = '本科';
+  else if (/专科|大专/i.test(text)) result.degree = '专科';
+
+  // --- 毕业年份 ---
+  const gradMatch = text.match(/(20\d{2})[\s.]*[届年毕]/);
+  if (gradMatch) result.graduateYear = gradMatch[1] + '届';
+
+  // --- 技能 ---
+  const skillKw = ['Python', 'Java', 'C++', 'C语言', 'Go', 'Golang', 'Rust', 'JavaScript', 'JS', 'TypeScript', 'TS',
+    'SQL', 'MySQL', 'PostgreSQL', 'MongoDB', 'Redis', 'Docker', 'Kubernetes', 'K8s', 'Linux', 'Unix',
+    'Git', 'Spring', 'SpringBoot', 'MyBatis', 'Hibernate', 'React', 'Vue', 'Vue.js', 'Angular',
+    'Node', 'Node.js', 'Express', 'Django', 'Flask', 'FastAPI', 'TensorFlow', 'PyTorch', 'Keras',
+    'Machine Learning', '深度学习', 'NLP', '自然语言处理', '计算机视觉', 'CV', '数据分析', '数据挖掘',
+    'Spark', 'Hadoop', 'Kafka', 'RabbitMQ', 'Nginx', 'AWS', 'Azure', 'GCP', '微服务', '分布式',
+    'HTML', 'CSS', 'Sass', 'Webpack', 'Vite', '小程序', 'Flutter', 'Swift', 'Kotlin'];
+  const foundSkills = new Set();
+  const lowerText = text.toLowerCase();
+  skillKw.forEach(s => {
+    if (lowerText.includes(s.toLowerCase())) foundSkills.add(s);
+  });
+  if (foundSkills.size > 0) {
+    result.skills = [...foundSkills].slice(0, 15).map(s => ({ name: s, level: 80 }));
+  }
+
+  // --- 邮箱 ---
+  const emailM = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  if (emailM) result.email = emailM[1];
+
+  // --- 手机号 ---
+  const phoneM = text.match(/(1[3-9]\d)\s*-?\s*(\d{4})\s*-?\s*(\d{4})/);
+  if (phoneM) result.phone = phoneM[1] + '****' + phoneM[3];
+
+  // --- 实习经历（尝试提取公司名） ---
+  const companyKw = ['字节跳动', '腾讯', '阿里巴巴', '阿里', '百度', '美团', '京东', '华为', '小米',
+    '网易', '快手', '拼多多', '滴滴', '哔哩哔哩', 'B站', '小红书', '携程', '商汤', '旷视',
+    '微软', 'Google', '谷歌', 'Amazon', '亚马逊', 'Apple', '苹果', 'Meta', 'IBM', 'Intel'];
+  for (const kw of companyKw) {
+    if (text.includes(kw)) {
+      // 尝试提取公司附近的职位描述
+      const idx = text.indexOf(kw);
+      const snippet = text.slice(idx, idx + 60).replace(/\n/g, ' ');
+      result.internshipDetected = (result.internshipDetected || []);
+      result.internshipDetected.push(snippet);
+    }
+  }
+
+  // --- 求职意向 ---
+  const citiesFound = [];
+  ['北京', '上海', '深圳', '广州', '杭州', '成都', '南京', '武汉', '西安', '苏州'].forEach(c => {
+    if (text.includes(c)) citiesFound.push(c);
+  });
+  if (citiesFound.length > 0) {
+    result.targetCities = citiesFound.slice(0, 3);
+  }
 
   return result;
 }
 
-// 原始Demo画像（完整模拟数据）
+// 原始Demo画像（完整模拟数据，供Demo按钮使用）
 function renderProfileCard() {
   const profile = STUDENT_PROFILE;
   const card = document.getElementById('profileCard');
@@ -405,71 +462,83 @@ function renderProfileCard() {
   card.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-// 基于真实解析文本生成画像（通用版）
-function renderProfileCardGeneric(profile, rawText) {
+// 基于真实上传简历生成画像（不混入Demo数据）
+function renderProfileCardReal(extracted, rawText) {
   const card = document.getElementById('profileCard');
-  const skills = profile.skills || STUDENT_PROFILE.skills;
-  card.innerHTML = `
+  const name = extracted.name || '未识别';
+  const avatarChar = extracted.name ? extracted.name[0] : '?';
+
+  let html = `
     <div class="profile-header">
-      <div class="profile-avatar">${(profile.name || '未') [0]}</div>
+      <div class="profile-avatar" style="background:linear-gradient(135deg,var(--accent),#00B894);">${avatarChar}</div>
       <div class="profile-info">
-        <h3>${profile.name || '未识别姓名'} <span class="tag tag-primary">${profile.graduateYear || '应届'}</span></h3>
-        <div class="school">${profile.school || '未识别学校'} · ${profile.major || '未识别专业'} · ${profile.degree || '硕士'}</div>
+        <h3>${name} ${extracted.graduateYear ? '<span class="tag tag-primary">' + extracted.graduateYear + '</span>' : ''}</h3>
+        <div class="school">${extracted.school || '🏫 学校未识别'} · ${extracted.major || '📚 专业未识别'} · ${extracted.degree || '🎓 学历未识别'}</div>
         <div class="basic">
-          ${profile.email ? `<span>📧 ${profile.email}</span>` : ''}
-          ${profile.phone ? `<span>📱 ${profile.phone}</span>` : ''}
+          ${extracted.email ? '<span>📧 ' + extracted.email + '</span>' : ''}
+          ${extracted.phone ? '<span>📱 ' + extracted.phone + '</span>' : ''}
         </div>
       </div>
-    </div>
+    </div>`;
+
+  // 技能标签
+  if (extracted.skills && extracted.skills.length > 0) {
+    html += `
     <div class="profile-section">
-      <h4>🛠 AI提取技能标签</h4>
+      <h4>🛠 AI提取技能（${extracted.skills.length}项）</h4>
       <div class="skills-cloud">
-        ${skills.map(s => `<span class="skill-tag">${s.name || s}</span>`).join('')}
+        ${extracted.skills.map(s => `<span class="skill-tag">${s.name || s}</span>`).join('')}
       </div>
-    </div>
-    ${profile.internship ? `
+    </div>`;
+  }
+
+  // 检测到的实习公司
+  if (extracted.internshipDetected && extracted.internshipDetected.length > 0) {
+    html += `
     <div class="profile-section">
-      <h4>💼 实习经历</h4>
-      <div class="experience-card">
-        <div class="exp-header">
-          <span class="role">${profile.internship.company} · ${profile.internship.position}</span>
-          <span class="duration">${profile.internship.duration}</span>
-        </div>
-        <div class="exp-desc">${profile.internship.description}</div>
-      </div>
-    </div>` : ''}
-    ${profile.projects ? `
-    <div class="profile-section">
-      <h4>📂 项目经历</h4>
-      ${profile.projects.map(p => `
+      <h4>💼 检测到的经历线索</h4>
+      ${extracted.internshipDetected.slice(0, 5).map(s => `
         <div class="experience-card">
-          <div class="exp-header">
-            <span class="role">${p.name}</span>
-            <span class="duration">${p.role}</span>
-          </div>
-          <div class="exp-desc">${p.description}</div>
-          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-            ${p.tech.map(t => `<span class="tag tag-primary" style="font-size:0.7rem;">${t}</span>`).join('')}
-          </div>
+          <div class="exp-desc">...${escapeHtml(s)}...</div>
         </div>
       `).join('')}
-    </div>` : ''}
+    </div>`;
+  }
+
+  // 简历原文
+  html += `
     <div class="profile-section">
-      <h4>📋 简历原文（AI已解析）</h4>
+      <h4>📋 简历原文</h4>
       <div class="experience-card">
-        <div class="exp-desc" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;font-size:0.8rem;">${escapeHtml(rawText.slice(0, 1500))}${rawText.length > 1500 ? '\n...(已截断)' : ''}</div>
+        <div class="exp-desc" style="max-height:250px;overflow-y:auto;white-space:pre-wrap;font-size:0.82rem;line-height:1.7;">${escapeHtml(rawText.slice(0, 2000))}${rawText.length > 2000 ? '\n\n…(已截断，完整内容已读取)' : ''}</div>
       </div>
-    </div>
+    </div>`;
+
+  // 求职意向（如果能检测到）
+  if (extracted.targetCities && extracted.targetCities.length > 0) {
+    html += `
     <div class="profile-section">
-      <h4>🎯 求职意向</h4>
+      <h4>🎯 检测到的意向城市</h4>
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
-        ${(profile.preference || STUDENT_PROFILE.preference).targetPositions.map(p => `<span class="tag tag-accent">${p}</span>`).join('')}
-        <span style="color:var(--text-light);font-size:0.88rem;">
-          📍 ${(profile.preference || STUDENT_PROFILE.preference).targetCities.join(' / ')}
-        </span>
+        ${extracted.targetCities.map(c => `<span class="tag tag-accent">📍 ${c}</span>`).join('')}
       </div>
-    </div>
-  `;
+    </div>`;
+  }
+
+  // 如果解析质量很低，给出提示
+  if (!extracted.name && !extracted.school && (!extracted.skills || extracted.skills.length < 2)) {
+    html += `
+    <div class="experience-card" style="background:var(--warning-light);border-left:3px solid var(--warning);margin-top:16px;">
+      <div class="exp-desc" style="color:#C17D0A;">
+        ⚠️ 自动解析信息较少，建议检查简历格式：<br>
+        1. 确保简历中包含明确的"姓名"、"学校"、"专业"等字段<br>
+        2. PDF文件可能因格式问题解析不完整，尝试TXT或DOCX格式<br>
+        3. 也可使用"Demo模拟数据"体验完整功能
+      </div>
+    </div>`;
+  }
+
+  card.innerHTML = html;
   card.classList.add('active');
   card.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
